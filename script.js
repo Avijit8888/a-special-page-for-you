@@ -422,7 +422,15 @@ async function handleSend() {
 
   // Show user message
   makeBubble(esc(raw), 'me', 'bubble', true);
-// 🔥 Firebase store (added)
+import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+const db = getFirestore();
+
+addDoc(collection(db, "messages"), {
+  text: raw,
+  timestamp: serverTimestamp()
+});
+  // 🔥 Firebase store (added)
 try {
   db.collection("messages").add({
     text: raw,
