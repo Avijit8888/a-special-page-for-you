@@ -16,12 +16,15 @@
 
 'use strict';
 // 🔥 Firebase init (added)
+// ✅ REPLACE lines 19–23 with your real config:
 const firebaseConfig = {
-  apiKey: "AIzaSyB...",  
+  apiKey: "AIzaSyB-YOUR-FULL-KEY-HERE",        // ← paste your real key
   authDomain: "chat-tracker-ac07c.firebaseapp.com",
-  projectId: "chat-tracker-ac07c"
+  projectId: "chat-tracker-ac07c",
+  storageBucket: "chat-tracker-ac07c.appspot.com",
+  messagingSenderId: "YOUR-SENDER-ID",
+  appId: "YOUR-APP-ID"
 };
-
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
@@ -422,7 +425,37 @@ async function handleSend() {
 
   // Show user message
   makeBubble(esc(raw), 'me', 'bubble', true);
-import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+// ✅ ADD THIS — single correct compat-style Firestore write
+try {
+  db.collection("messages").add({
+    text: raw,
+    sender: "user",
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+} catch (e) {
+  console.warn("Firestore write failed:", e);
+}
+```
+
+That's it. One try/catch, one `.add()`, using the compat API that matches the SDK already loaded in your HTML.
+
+---
+
+## 5. FINAL VERIFICATION STEPS
+
+**Step 1 — Check Firestore Rules**
+
+In the Firebase console → Firestore → Rules, make sure you have:
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;   // ← for testing only
+    }
+  }
+}
+  import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
 const db = getFirestore();
 
