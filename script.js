@@ -15,16 +15,16 @@
  */
 
 'use strict';
-// 🔥 Firebase init (added)
-// ✅ REPLACE lines 19–23 with your real config:
+// 🔥 Firebase setup (top e boshao)
 const firebaseConfig = {
-  apiKey: "AIzaSyB-YOUR-FULL-KEY-HERE",        // ← paste your real key
+  apiKey: "YOUR_REAL_API_KEY",
   authDomain: "chat-tracker-ac07c.firebaseapp.com",
   projectId: "chat-tracker-ac07c",
   storageBucket: "chat-tracker-ac07c.appspot.com",
-  messagingSenderId: "YOUR-SENDER-ID",
-  appId: "YOUR-APP-ID"
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
