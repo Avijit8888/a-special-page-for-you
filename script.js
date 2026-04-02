@@ -649,6 +649,7 @@ function setupGate() {
   }
 
   $('enter-btn').addEventListener('click', async () => {
+  console.log("🔥 enter clicked");
     const gate = $('gate');
     gate.classList.add('out');
     $('app').classList.add('on');
