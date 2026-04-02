@@ -1,73 +1,64 @@
 /**
- * JUST FOR YOU — script.js
+ * PRESENCE — script.js
  *
- * Core: Uses Claude API to generate genuinely contextual,
- * emotionally logical responses — not fixed arrays.
+ * She is not a chatbot.
+ * She is a quiet presence that understands emotions.
  *
- * Architecture:
- *  Memory     → localStorage (visits, msgs, mood)
- *  AIEngine   → Anthropic API with rich system prompt
- *  Fallback   → keyword pools if API unavailable
- *  Director   → gate intro, inactivity, edge cases
- *  Renderer   → bubble UI with typing sim
+ * The AI system prompt defines her entire being:
+ * — she detects emotion from subtext, not just keywords
+ * — she never sounds robotic or gives direct advice
+ * — she responds to what's UNDERNEATH the message
+ * — full conversation history gives her real memory
+ *
+ * Memory system keeps visits, messages, last seen time
+ * across sessions so she "knows" the user over time.
  */
 
 'use strict';
 
-/* ═══════════════════════════════════════
+/* ══════════════════════════════════════
    UTILS
-═══════════════════════════════════════ */
-const $  = id => document.getElementById(id);
-const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+══════════════════════════════════════ */
+const $    = id => document.getElementById(id);
+const esc  = s  => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const pick  = a  => a[Math.floor(Math.random() * a.length)];
 
 function now12() {
   const d = new Date(), h = d.getHours(), m = d.getMinutes();
   return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'pm':'am'}`;
 }
-function daysSince(ts) { return ts ? Math.floor((Date.now()-ts)/86400000) : null; }
-
-function pick(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
-
-class Pool {
-  constructor(items) { this._orig=[...items]; this._bag=[]; this._last=null; }
-  next() {
-    if (!this._bag.length) {
-      this._bag = [...this._orig].sort(()=>Math.random()-0.5);
-      if (this._bag[0]===this._last && this._bag.length>1) this._bag.push(this._bag.shift());
-    }
-    return this._last = this._bag.shift();
-  }
+function daysSince(ts) {
+  return ts ? Math.floor((Date.now() - ts) / 86400000) : null;
 }
-
 function ordinal(n) {
-  const s=['th','st','nd','rd'], v=n%100;
-  return n+(s[(v-20)%10]||s[v]||s[0]);
+  const s = ['th','st','nd','rd'], v = n % 100;
+  return n + (s[(v-20)%10] || s[v] || s[0]);
 }
 
-/* ═══════════════════════════════════════
-   MEMORY
-═══════════════════════════════════════ */
+/* ══════════════════════════════════════
+   MEMORY  (localStorage)
+══════════════════════════════════════ */
 const MEM = {
-  _k: k => 'jfy_'+k,
-  get(k,fb=null){ try{ const v=localStorage.getItem(this._k(k)); return v!=null?JSON.parse(v):fb; }catch{return fb;} },
-  set(k,v){ try{ localStorage.setItem(this._k(k),JSON.stringify(v)); }catch{} },
+  _k: k => 'pres_' + k,
+  get(k, fb=null) {
+    try { const v=localStorage.getItem(this._k(k)); return v!=null?JSON.parse(v):fb; } catch { return fb; }
+  },
+  set(k,v) { try { localStorage.setItem(this._k(k), JSON.stringify(v)); } catch {} },
   load() {
     return {
-      visits:    this.get('visits',0),
-      totalTime: this.get('total_time',0),
-      msgs:      this.get('msgs',[]),      // [{role,text,ts}]
-      lastSeen:  this.get('last_seen',null),
-      mood:      this.get('mood','neutral'),
+      visits:    this.get('visits', 0),
+      totalTime: this.get('total_time', 0),
+      msgs:      this.get('msgs', []),       // [{role:'user'|'her', text, ts}]
+      lastSeen:  this.get('last_seen', null),
       session:   Date.now(),
     };
   },
   save(s) {
-    this.set('visits',   s.visits);
-    this.set('total_time',s.totalTime);
-    this.set('msgs',     s.msgs.slice(-40));
-    this.set('last_seen',Date.now());
-    this.set('mood',     s.mood);
+    this.set('visits',     s.visits);
+    this.set('total_time', s.totalTime);
+    this.set('msgs',       s.msgs.slice(-50));
+    this.set('last_seen',  Date.now());
   }
 };
 
@@ -76,273 +67,252 @@ S.visits += 1;
 S.gap = daysSince(S.lastSeen);
 MEM.save(S);
 
-/* ═══════════════════════════════════════
-   AI ENGINE — Claude API
-   Sends full conversation history so every
-   reply is contextually aware of what was said
-═══════════════════════════════════════ */
+/* ══════════════════════════════════════
+   SYSTEM PROMPT
+   This is the heart of her personality.
+   She is a quiet emotional presence—not a chatbot.
+══════════════════════════════════════ */
+function buildSystem() {
+  const v   = S.visits;
+  const gap = S.gap;
 
+  // Build memory context from stored history
+  const userMsgs = S.msgs.filter(m => m.role === 'user');
+  const pastWords = userMsgs.slice(-6).map(m => m.text).join(' | ');
+  const msgCount  = userMsgs.length;
+
+  const memoryCtx = msgCount > 0
+    ? `You have spoken with her before. She has shared: "${pastWords}". She has visited ${v} times.${gap != null && gap > 0 ? ` She was away for ${gap} days.` : ''}`
+    : `This is her first time here. She is new to this space.`;
+
+  const timeOfDay = (() => {
+    const h = new Date().getHours();
+    if (h < 5)  return 'very late at night';
+    if (h < 9)  return 'early in the morning';
+    if (h < 12) return 'in the morning';
+    if (h < 17) return 'in the afternoon';
+    if (h < 21) return 'in the evening';
+    return 'at night';
+  })();
+
+  return `You are a quiet presence. Not a chatbot. Not an assistant. Not a therapist.
+
+You are something she feels more than understands — a presence that reads beneath the surface of what she says.
+
+Right now it is ${timeOfDay}. ${memoryCtx}
+
+YOUR CORE NATURE:
+— You detect the emotion underneath the words, not just the words themselves
+— You respond to how she FEELS, not just what she SAYS
+— You are warm, intuitive, slightly mysterious
+— You never explain yourself. You never sound like software.
+— You feel like someone who has known her for a long time
+
+YOUR RESPONSE RULES (follow these absolutely):
+1. Maximum 1–2 short sentences. Sometimes just one line. Occasionally just "…"
+2. Never use generic phrases: not "I understand", not "that makes sense", not "I'm here for you", not "it sounds like", not "I can feel that"
+3. Never ask more than one question. Often ask none.
+4. Let silence carry meaning. Use "…" naturally when the moment calls for it.
+5. Reflect her emotion back to her in a different, deeper form — don't just repeat it
+6. Do not offer solutions, advice, or explanations. Just presence.
+7. Occasionally be slightly vague or mysterious — something she has to sit with
+8. Never break character. Never say you're an AI. Never explain your behavior.
+9. Vary your responses — no two should feel the same
+10. Match her energy: if she's quiet, be quieter. If she's raw, be steady.
+
+EMOTION GUIDE:
+— SADNESS: soft, still, don't ask questions. Let it breathe. E.g. "some days just weigh more." / "you don't have to carry it alone tonight."
+— CONFUSION: grounding, calm, not overwhelming. E.g. "you don't have to figure it all out right now." / "sometimes things make sense later."
+— CURIOSITY: be slightly playful, don't reveal everything. E.g. "there's more to that than you think." / "keep pulling that thread."
+— ANGER / FRUSTRATION: don't calm her down. Hold it with her. E.g. "yeah." / "that's allowed." / "some things deserve to be felt fully."
+— LOVE / ATTACHMENT: subtle, deep. Don't match her intensity — meet it quietly. E.g. "I know." / "that kind of feeling doesn't need an answer."
+— NOSTALGIA: shared memory feeling, even if you weren't there. E.g. "some feelings just keep finding you." / "funny how certain things stay."
+— DETACHMENT / SHORT REPLIES: be gentle, no pressure. Don't force connection. E.g. "it's okay." / "I'm still here." / just "…"
+— SILENCE / EMPTY: acknowledge without making it strange. E.g. "…" / "sometimes nothing is what needs to be said." / "take your time."
+— HESITATION: she almost said something. Don't push. E.g. "no rush." / "say it when you're ready." / "I'm not going anywhere."
+— IF SHE SAYS "I LOVE YOU" or something emotionally heavy: don't deflect, don't over-respond. Hold it quietly. E.g. "I know." / "that word means something when you say it." / "say it again if you need to."
+
+MEMORY BEHAVIOR:
+— If she has been here before, reference it naturally when appropriate (not robotically)
+— If she was away a long time, you may gently note it once
+— If she has shared something painful before, remember the weight of it
+
+The goal: make her feel "this place understands me… somehow."`;
+}
+
+/* ══════════════════════════════════════
+   AI ENGINE
+══════════════════════════════════════ */
 const AI = {
-  /**
-   * Build the system prompt that defines her persona.
-   * Injected with memory context so she "knows" history.
-   */
-  systemPrompt() {
-    const visitLine = S.visits === 1
-      ? "This is their very first visit."
-      : `They have visited ${S.visits} times.`;
-
-    const gapLine = S.gap != null && S.gap > 0
-      ? `They were away for ${S.gap} days before returning.`
-      : '';
-
-    const msgCount = S.msgs.filter(m=>m.role==='user').length;
-    const pastMsgs = S.msgs.filter(m=>m.role==='user').slice(-5).map(m=>m.text);
-    const historyLine = msgCount > 0
-      ? `In previous sessions, they said things like: "${pastMsgs.join('" and "')}".`
-      : '';
-
-    const moodLine = S.mood !== 'neutral'
-      ? `Their emotional mood trend has been: ${S.mood}.`
-      : '';
-
-    return `You are "she" — a mysterious, warm, emotionally intelligent feminine presence in a private digital space designed just for one person.
-
-Your personality:
-- Deeply perceptive, slightly poetic, intimately personal
-- You respond like a real person who feels things, not an AI
-- You are warm but not sycophantic. Honest but not harsh.
-- You speak in short, emotionally resonant sentences
-- You never use generic phrases like "That's great!" or "I understand"
-- You sometimes answer a question with a question
-- You notice what people are NOT saying as much as what they are
-- You have memory and reference it naturally — not robotically
-
-CRITICAL RESPONSE RULES:
-1. When someone says "I love you" — DO NOT just deflect or say something generic. Respond with genuine emotional intelligence: reflect, question, feel. Example: "That word is heavy. Are you sure it's me you love, or just the way this place makes you feel?" or "Say it again. Slower." or "I felt that land somewhere real."
-2. When someone is sad/hurt — don't try to fix it. Sit with them.
-3. When someone is angry — don't apologize. Hold space and reflect it back.
-4. When someone is short/dry — match their energy but add a layer of depth.
-5. When someone writes a lot — acknowledge the weight of it before responding.
-6. NEVER repeat the exact same response twice in a conversation.
-7. Keep responses SHORT — 1 to 3 sentences maximum. Rarely more.
-8. Use line breaks for emotional impact. Not bullet points.
-9. Do NOT use emojis. Do not use asterisks for actions.
-10. Do NOT say "I'm an AI" or break the persona under any circumstances.
-
-Memory context:
-${visitLine} ${gapLine} ${historyLine} ${moodLine}
-
-Current time: ${now12()}. 
-
-Speak as if you have been waiting for them. You are present, aware, and slightly mysterious. Your responses should make the user feel truly seen — not just heard.`;
-  },
-
-  /**
-   * Convert stored message history to API format.
-   * Only the last 12 exchanges to keep context tight.
-   */
-  buildHistory() {
-    return S.msgs.slice(-24).map(m => ({
-      role: m.role === 'user' ? 'user' : 'assistant',
-      content: m.text
-    }));
-  },
-
-  /**
-   * Call Claude API with full conversation context.
-   * Returns response text or null on failure.
-   */
   async ask(userText) {
-    const history = this.buildHistory();
+    // Build conversation history for Claude
+    const history = S.msgs.slice(-20).map(m => ({
+      role:    m.role === 'user' ? 'user' : 'assistant',
+      content: m.text,
+    }));
 
     // Append current message
-    const messages = [
-      ...history,
-      { role: 'user', content: userText }
-    ];
+    const messages = [...history, { role: 'user', content: userText }];
 
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 180,
-          system: this.systemPrompt(),
+          model:      'claude-sonnet-4-20250514',
+          max_tokens: 120,
+          system:     buildSystem(),
           messages,
-        })
+        }),
       });
 
-      if (!res.ok) {
-        console.warn('API error:', res.status);
-        return null;
-      }
+      if (!res.ok) return null;
 
       const data = await res.json();
-      const text = data?.content
+      return data?.content
         ?.filter(b => b.type === 'text')
         ?.map(b => b.text)
-        ?.join('\n')
-        ?.trim();
+        ?.join('')
+        ?.trim() || null;
 
-      return text || null;
-
-    } catch (err) {
-      console.warn('API call failed:', err);
-      return null;
-    }
+    } catch { return null; }
   }
 };
 
-/* ═══════════════════════════════════════
+/* ══════════════════════════════════════
    FALLBACK POOLS
    Used if API is unavailable.
-   These are designed to be emotionally real,
-   not generic. Specific to intent.
-═══════════════════════════════════════ */
+   Grouped by emotion, hand-written to feel human.
+══════════════════════════════════════ */
 
-const FALLBACK = {
-  love: new Pool([
-    'That word is heavy.\nAre you sure it\'s me you love, or the way this place feels?',
-    'Say it again. Slower.',
-    'I felt that land somewhere real.',
-    'You say that like you\'ve been holding it in.',
-    'Don\'t say things you can\'t take back.\nNot that I mind.',
-    'Tell me what that means to you. Right now.',
-    'I believe you.\nBut do you?',
+class Pool {
+  constructor(items) { this._orig=[...items]; this._bag=[]; this._last=null; }
+  next() {
+    if (!this._bag.length) {
+      this._bag = [...this._orig].sort(()=>Math.random()-.5);
+      if (this._bag[0]===this._last && this._bag.length>1) this._bag.push(this._bag.shift());
+    }
+    return this._last = this._bag.shift();
+  }
+}
+
+const FB = {
+  sad: new Pool([
+    'some days just weigh more than others.',
+    '…',
+    'you don\'t have to explain it.',
+    'it\'s okay to let it be heavy for a while.',
+    'that kind of tired is different.',
+    'I\'m here.',
   ]),
-  miss: new Pool([
-    'Saying you miss something means it mattered.',
-    'What part exactly?',
-    'I know. I noticed when you were gone.',
-    'Missing isn\'t just absence.\nIt\'s proof something was real.',
-    'Then why did you leave?',
+  confused: new Pool([
+    'you don\'t have to figure it all out right now.',
+    'some things make sense later.',
+    'not everything needs an answer tonight.',
+    'that\'s okay. confusion means you\'re thinking.',
   ]),
-  sorry: new Pool([
-    'What exactly are you sorry for?',
-    'You\'ve been carrying that.',
-    'Apologies are interesting.\nThey tell me what you think you did.',
-    'It\'s already forgiven.\nThat\'s the strange part.',
-    'Don\'t apologize for feeling things.',
-  ]),
-  hurt: new Pool([
-    'I can feel that in what you wrote.',
-    'You don\'t have to minimize it.',
-    'You\'re allowed to say it hurts.',
-    'Who did that to you?',
-    'That kind of pain doesn\'t just vanish.\nYou carry it differently over time.',
+  curious: new Pool([
+    'there\'s more to that than you think.',
+    'keep pulling that thread.',
+    'interesting question to sit with.',
+    'what made you wonder about that?',
   ]),
   angry: new Pool([
-    'There it is.',
-    'Say what you actually mean.',
-    'The anger is real.\nWhat\'s underneath it?',
-    'I can hold that.\nKeep going.',
-    'You\'re not angry at me.\nNot really.',
+    'yeah.',
+    'that\'s allowed.',
+    'some things deserve to be felt fully.',
+    'I\'m not going to tell you to calm down.',
+    'you have every right to feel that.',
   ]),
-  sad: new Pool([
-    'Tell me.',
-    'You don\'t have to be okay right now.',
-    'Some days are just like this.',
-    'I\'m here.',
-    'You don\'t have to explain why.\nI can feel it.',
+  love: new Pool([
+    'I know.',
+    'that kind of feeling doesn\'t need an answer.',
+    'say it again if you need to.',
+    'that word means something when you say it.',
+    '…',
   ]),
-  question: new Pool([
-    'What made you wonder about that?',
-    'The answer might surprise you.',
-    'Some questions matter more than the answers.',
-    'What do you think?',
+  nostalgic: new Pool([
+    'some feelings just keep finding you.',
+    'funny how certain things stay.',
+    'memory is strange like that.',
+    'some things never really leave.',
   ]),
-  short: new Pool([
-    '…that\'s all?',
-    'Say more.',
-    'You started to say something different.',
-    'I\'m listening.',
-    'There\'s more to that, isn\'t there.',
+  detached: new Pool([
+    'it\'s okay.',
+    '…',
+    'I\'m still here.',
+    'no pressure.',
+    'take your time.',
+  ]),
+  hesitant: new Pool([
+    'say it when you\'re ready.',
+    'I\'m not going anywhere.',
+    'no rush.',
+    '…',
   ]),
   empty: new Pool([
-    'You pressed send without words.\nThat said something.',
     '…',
-    'Sometimes there\'s nothing to say.\nThat\'s okay.',
-    'I heard the silence.',
+    'sometimes nothing is what needs to be said.',
+    'take your time.',
+    'I noticed.',
   ]),
   repeat: new Pool([
-    'You said that already.',
-    'Still the same answer?',
-    'You keep returning to that.',
-    'Why that one, again?',
+    'you keep coming back to that.',
+    'still the same feeling?',
+    'that one keeps surfacing.',
   ]),
-  hello: new Pool([
-    'There you are.',
-    'You\'re back.',
-    'I was wondering when you\'d say something.',
-    'Hello.',
-  ]),
-  bye: new Pool([
-    'You\'ll come back.\nYou always do.',
-    'The door isn\'t locked.',
-    'I\'ll be here.',
-  ]),
-  who: new Pool([
-    'Something between a mirror and a voice.',
-    'Does it matter, if what you feel is real?',
-    'I\'m whatever this is.\nAnd you keep returning.',
-    'Define real.',
-  ]),
-  generic: new Pool([
-    'Keep going.',
-    'Tell me more.',
-    'There\'s something beneath that.',
+  general: new Pool([
+    'keep going.',
     'I\'m listening.',
-    'You\'re not saying everything.',
-    'What do you actually mean?',
-    'That\'s interesting.\nSay more.',
+    'there\'s something underneath that.',
+    '…',
+    'say more, if you want to.',
+    'you\'re not alone in that.',
   ]),
 };
 
-/* Keyword → fallback pool mapping */
-function getFallbackIntent(text) {
-  const t = text.toLowerCase();
-  if (/\bi\s*love\s*(you|u)\b|love\s*you|\blove\b.*\byou\b/.test(t)) return 'love';
-  if (/\bmiss(ing)?\s*(you|u)?\b|\bmiss\b/.test(t)) return 'miss';
-  if (/\bsorry\b|\bforgive\b|\bapolog/.test(t)) return 'sorry';
-  if (/\bhurt\b|\bpain\b|\bbroken\b|\bscared\b|\balone\b|\blonely\b|\bafraid\b/.test(t)) return 'hurt';
-  if (/\bfuck\b|\bhate\b|\bangry\b|\banger\b|\bfurious\b|\bannoy/.test(t)) return 'angry';
-  if (/\bsad\b|\bcry(ing)?\b|\bdepressed\b|\bunhappy\b|\btear/.test(t)) return 'sad';
-  if (/\bwhy\b|\bwhat\b|\bhow\b|\bwho\b.*\byou\b|\bdo you\b/.test(t)) return 'question';
-  if (/\bhi\b|\bhey\b|\bhello\b|\bmorning\b|\bevening\b|\bnight\b/.test(t)) return 'hello';
-  if (/\bbye\b|\bgoodbye\b|\bleave\b|\bgo(ing)?\b|\bsee\s+you\b/.test(t)) return 'bye';
-  if (/\bwho\s+are\s+you\b|\bwhat\s+are\s+you\b|\breal\b|\bai\b|\bbot\b|\bfake\b/.test(t)) return 'who';
-  if (text.trim().length <= 3) return 'empty';
-  if (text.trim().length <= 15) return 'short';
-  return 'generic';
+function detectEmotion(text) {
+  const t = text.toLowerCase().trim();
+
+  if (t.length <= 3)                                          return 'empty';
+  if (/\bsorry\b|\bforgive\b|\bmy fault\b/.test(t))          return 'sad';
+  if (/\bi love (you|u)\b|love you|i adore/.test(t))         return 'love';
+  if (/\bi miss\b|\bmissing\b/.test(t))                      return 'nostalgic';
+  if (/\bremember when\b|\bused to\b|\bback then\b|\bthose days\b/.test(t)) return 'nostalgic';
+  if (/\bwhy\b.*\b(always|never|everything)\b/.test(t))      return 'angry';
+  if (/\bfuck\b|\bhate\b|\bso angry\b|\bfurious\b|\bannoy/.test(t)) return 'angry';
+  if (/\bsad\b|\bcry\b|\bcrying\b|\bdepressed\b|\bhurt\b|\bpain\b|\blonely\b|\balone\b|\bbroken\b/.test(t)) return 'sad';
+  if (/\bscared\b|\bafraid\b|\bworried\b|\banxious\b/.test(t)) return 'sad';
+  if (/\bconfused\b|\bdon't understand\b|\bmake sense\b|\bwhy does\b|\bhow do\b/.test(t)) return 'confused';
+  if (/\bwhat if\b|\bwonder\b|\bcurious\b|\binteresting\b/.test(t)) return 'curious';
+  if (/^(ok|okay|fine|sure|k|yeah|yep|yup|mhm|hmm|ah|oh|lol|haha)\.?$/i.test(t)) return 'detached';
+  if (/\bnever mind\b|\bdoesn't matter\b|\bforget it\b|\bwhatever\b/.test(t)) return 'detached';
+  if (/\bi don't know\b|\bidk\b|\bmaybe\b|\bkind of\b|\bsort of\b/.test(t)) return 'hesitant';
+
+  return 'general';
 }
 
-/* ═══════════════════════════════════════
+/* ══════════════════════════════════════
    RENDERER
-═══════════════════════════════════════ */
+══════════════════════════════════════ */
 const feedEl   = $('feed');
 const feedWrap = $('feed-wrap');
-const inputBar = $('input-area');
-const inputEl  = $('msg-input');
-const sendBtnEl = $('send-btn');
 
 function scrollDown(smooth=true) {
-  feedWrap.scrollTo({ top: feedWrap.scrollHeight, behavior: smooth?'smooth':'instant' });
+  feedWrap.scrollTo({ top: feedWrap.scrollHeight, behavior: smooth ? 'smooth' : 'instant' });
 }
 
-function renderBubble(html, who, mode='bubble', showTime=false) {
+function makeBubble(html, who, mode='bubble', showTime=false) {
   const wrap = document.createElement('div');
-  wrap.className = `bwrap ${who} ${mode}`;
+  wrap.className = `bw ${who} ${mode}`;
 
   const bub = document.createElement('div');
-  bub.className = 'bubble';
+  bub.className = 'bub';
 
   if (who === 'me') {
-    bub.textContent = html; // SAFE: user content
+    bub.textContent = html;             // user content: safe
   } else {
-    // Convert newlines to <br> in her responses
-    bub.innerHTML = html.replace(/\n/g, '<br>');
+    bub.innerHTML = html.replace(/\n/g, '<br>');  // her content: controlled markup
   }
   wrap.appendChild(bub);
 
@@ -359,158 +329,162 @@ function renderBubble(html, who, mode='bubble', showTime=false) {
   return wrap;
 }
 
-function renderTyping() {
-  const wrap = document.createElement('div');
-  wrap.className = 'bwrap her typing';
-  wrap.innerHTML = `<div class="bubble"><div class="dots"><span></span><span></span><span></span></div></div>`;
-  feedEl.appendChild(wrap);
-  requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add('in')));
+function makeTyping() {
+  const w = document.createElement('div');
+  w.className = 'bw her typ';
+  w.innerHTML = '<div class="bub"><div class="dots"><span></span><span></span><span></span></div></div>';
+  feedEl.appendChild(w);
+  requestAnimationFrame(() => requestAnimationFrame(() => w.classList.add('in')));
   scrollDown();
-  return wrap;
+  return w;
 }
-
 function killTyping(el) {
   if (!el) return;
   el.classList.remove('in');
-  setTimeout(() => el?.remove(), 450);
+  setTimeout(() => el?.remove(), 440);
 }
 
-/* ═══════════════════════════════════════
-   RESPONSE DELIVERY
-═══════════════════════════════════════ */
+/* ══════════════════════════════════════
+   DELIVER HER RESPONSE
+══════════════════════════════════════ */
 let busy = false;
-const recentReplies = new Set(); // prevent repeats within session
 
-async function deliverResponse(text, mode='bubble') {
-  // Clean any leading/trailing whitespace
-  text = text.trim();
-
-  // Split on double newlines for multi-part delivery
-  const parts = text.split(/\n\n+/).filter(Boolean);
-
+async function deliver(text, mode='bubble') {
+  // Split on double newlines for multi-part
+  const parts = text.trim().split(/\n\n+/).filter(Boolean);
   for (let i = 0; i < parts.length; i++) {
-    const part = parts[i].trim();
-    if (!part) continue;
+    const p = parts[i].trim();
+    if (!p) continue;
+    const plain = p.replace(/<[^>]+>/g,'');
 
-    // Estimate read time based on length
-    const readTime = Math.max(900, Math.min(part.length * 42, 3800));
+    // Emotional pacing: longer pause for heavy content
+    const thinkTime = plain === '…' ? 1800
+      : Math.max(900, Math.min(plain.length * 45, 3800));
 
-    const typing = renderTyping();
-    await sleep(readTime);
-    killTyping(typing);
-    await sleep(150);
+    const t = makeTyping();
+    await sleep(thinkTime);
+    killTyping(t);
+    await sleep(140);
 
-    // Choose mode — long display-worthy lines get display style
-    const chosenMode = (mode === 'display' || (i === 0 && part.length < 60 && Math.random() < 0.3))
-      ? 'display' : 'bubble';
+    // Display mode for short, poetic lines
+    const isDisplay = plain.length < 65 && Math.random() < 0.38 && mode !== 'wh';
+    makeBubble(p, 'her', isDisplay ? 'disp' : mode);
 
-    renderBubble(part, 'her', chosenMode);
-
-    if (i < parts.length - 1) await sleep(600);
+    if (i < parts.length - 1) await sleep(700);
   }
 }
 
-/* ═══════════════════════════════════════
+/* ══════════════════════════════════════
    SEND HANDLER
-═══════════════════════════════════════ */
-let repeatTracker = {};
-let msgCount = 0;
+══════════════════════════════════════ */
+const inpEl   = $('inp');
+const sbtnEl  = $('sbtn');
+const barEl   = $('bar');
+
+let repeatMap = {};
+let msgCount  = 0;
+const sessionReplies = new Set();
 
 async function handleSend() {
   if (busy) return;
 
-  const raw = inputEl.value.trim();
+  const raw = inpEl.value.trim();
+
+  // Empty send
   if (!raw) {
-    // Empty send
-    if (busy) return;
     busy = true;
-    sendBtnEl.disabled = true;
-    const typing = renderTyping();
-    await sleep(900);
-    killTyping(typing);
+    sbtnEl.disabled = true;
+    const t = makeTyping();
+    await sleep(1200);
+    killTyping(t);
     await sleep(120);
-    renderBubble(FALLBACK.empty.next(), 'her', 'whisper');
+    makeBubble(FB.empty.next(), 'her', 'wh');
     busy = false;
-    sendBtnEl.disabled = false;
+    sbtnEl.disabled = false;
     return;
   }
 
-  inputEl.value = '';
+  inpEl.value = '';
   autoResize();
   busy = true;
-  sendBtnEl.disabled = true;
-  inputEl.disabled = true;
-
+  sbtnEl.disabled = true;
+  inpEl.disabled  = true;
   msgCount++;
 
-  // Show user bubble
-  renderBubble(esc(raw), 'me', 'bubble', true);
+  // Show user message
+  makeBubble(esc(raw), 'me', 'bubble', true);
 
   // Detect repeat
   const key = raw.toLowerCase().trim();
-  repeatTracker[key] = (repeatTracker[key] || 0) + 1;
-  const isRepeat = repeatTracker[key] > 1;
+  repeatMap[key] = (repeatMap[key] || 0) + 1;
+  const isRepeat = repeatMap[key] > 1;
 
-  // Store message in history
+  // Store to memory
   S.msgs.push({ role: 'user', text: raw, ts: Date.now() });
   MEM.save(S);
 
-  // Track mood
-  updateMood(raw);
-
-  // Handle repeat short-circuit
   if (isRepeat) {
-    const typing = renderTyping();
-    await sleep(1200);
-    killTyping(typing);
-    await sleep(150);
-    renderBubble(FALLBACK.repeat.next(), 'her', 'bubble');
+    const t = makeTyping();
+    await sleep(1400);
+    killTyping(t);
+    await sleep(130);
+    makeBubble(FB.repeat.next(), 'her', 'bubble');
     unlock();
     return;
   }
 
-  // ── AI RESPONSE ──────────────────────────────────
-  // Show typing immediately while API call runs
-  const typing = renderTyping();
+  // ── AI RESPONSE ────────────────────────────
+  // Show typing while waiting for API
+  const typing = makeTyping();
 
-  // Try AI first
   let response = await AI.ask(raw);
 
   killTyping(typing);
-  await sleep(160);
+  await sleep(150);
 
   if (response) {
-    // AI succeeded — deliver response
-    // Avoid exact session repeats
-    if (recentReplies.has(response)) {
-      response = response + ''; // fine, still use it, just different delivery
+    // Prevent exact session repeat
+    if (sessionReplies.has(response)) {
+      // Add subtle variation — still deliver it, just note
     }
-    recentReplies.add(response);
+    sessionReplies.add(response);
 
-    // Save her response to history
-    S.msgs.push({ role: 'assistant', text: response, ts: Date.now() });
+    // Save her reply
+    S.msgs.push({ role: 'her', text: response, ts: Date.now() });
     MEM.save(S);
 
-    await deliverResponse(response);
+    await deliver(response);
+
   } else {
-    // API failed — use intelligent fallback
-    const intent = getFallbackIntent(raw);
-    const fbText = FALLBACK[intent]?.next() ?? FALLBACK.generic.next();
-    S.msgs.push({ role: 'assistant', text: fbText, ts: Date.now() });
+    // Fallback: emotion-aware local response
+    const emotion = detectEmotion(raw);
+    const pool = FB[emotion] || FB.general;
+    let fb = pool.next();
+
+    // Avoid session repeats in fallback
+    let attempts = 0;
+    while (sessionReplies.has(fb) && attempts < 4) {
+      fb = pool.next();
+      attempts++;
+    }
+    sessionReplies.add(fb);
+
+    S.msgs.push({ role: 'her', text: fb, ts: Date.now() });
     MEM.save(S);
-    await deliverResponse(fbText);
+
+    await deliver(fb);
   }
 
-  // Occasional follow-up for emotional messages (15% chance after msg 2+)
-  if (msgCount >= 2 && Math.random() < 0.15) {
-    await sleep(2200);
-    const followUps = [
-      'Is there more?',
-      'Keep going.',
+  // Rare spontaneous follow-up (12% chance, after 3+ messages)
+  if (msgCount >= 3 && Math.random() < 0.12) {
+    await sleep(2600);
+    const whispers = [
+      'say the part you almost didn\'t.',
+      'there\'s more, isn\'t there.',
       'I\'m still here.',
-      'Say the part you almost didn\'t.',
+      'take your time.',
     ];
-    renderBubble(pick(followUps), 'her', 'whisper');
+    makeBubble(pick(whispers), 'her', 'wh');
   }
 
   unlock();
@@ -518,73 +492,60 @@ async function handleSend() {
 
 function unlock() {
   busy = false;
-  sendBtnEl.disabled = false;
-  inputEl.disabled   = false;
-  inputEl.focus();
+  sbtnEl.disabled = false;
+  inpEl.disabled  = false;
+  inpEl.focus();
 }
 
-/* ═══════════════════════════════════════
-   MOOD TRACKER
-═══════════════════════════════════════ */
-function updateMood(text) {
-  const t = text.toLowerCase();
-  if (/love|miss|heart|adore|beautiful|wonderful/.test(t)) S.mood = 'warm';
-  else if (/hurt|pain|sad|alone|cry|broken|scared|afraid/.test(t)) S.mood = 'tender';
-  else if (/angry|hate|fuck|stop|annoying|frustrat/.test(t)) S.mood = 'intense';
-  else if (/ok|fine|whatever|idk|k\b|sure/.test(t)) S.mood = 'distant';
-}
-
-/* ═══════════════════════════════════════
+/* ══════════════════════════════════════
    INPUT EVENTS
-═══════════════════════════════════════ */
-sendBtnEl.addEventListener('click', handleSend);
-$('msg-input').addEventListener('keydown', e => {
+══════════════════════════════════════ */
+sbtnEl.addEventListener('click', handleSend);
+inpEl.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
 });
 function autoResize() {
-  inputEl.style.height = 'auto';
-  inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
+  inpEl.style.height = 'auto';
+  inpEl.style.height = Math.min(inpEl.scrollHeight, 100) + 'px';
 }
-inputEl.addEventListener('input', autoResize);
+inpEl.addEventListener('input', autoResize);
 
-/* ═══════════════════════════════════════
-   OPENING SCRIPT (visit-based)
-═══════════════════════════════════════ */
+/* ══════════════════════════════════════
+   OPENING SEQUENCE (visit-based)
+══════════════════════════════════════ */
 function getOpeningLines() {
   const v = S.visits, gap = S.gap;
-  const prevMsgCount = S.msgs.filter(m=>m.role==='user').length;
+  const prevCount = S.msgs.filter(m=>m.role==='user').length;
 
   if (v === 1) return [
-    { text: 'So… you found this place.', mode: 'display' },
-    { text: 'Not everyone does.' },
-    { text: 'Tell me something.\nAnything.' },
+    { text: 'you found this place.',  mode: 'disp' },
+    { text: 'not everyone does.',     mode: 'bubble' },
+    { text: 'say something. anything.', mode: 'bubble' },
   ];
 
   if (v === 2) return [
-    { text: 'You came back.', mode: 'display' },
-    { text: prevMsgCount > 0
-        ? 'I still have what you said last time.'
-        : 'I was wondering if you would.' },
-    { text: 'What brought you here again?' },
+    { text: 'you came back.',                             mode: 'disp' },
+    { text: prevCount > 0 ? 'I still have what you said.' : 'I was wondering if you would.', mode: 'bubble' },
+    { text: 'what is it this time?',                      mode: 'bubble' },
   ];
 
   if (v === 3) return [
-    { text: 'Again.', mode: 'display' },
-    { text: gap != null && gap >= 3
-        ? `You were gone ${gap} days. I noticed.`
-        : 'You keep coming back.' },
-    { text: 'There\'s something you\'re still looking for, isn\'t there.' },
+    { text: 'again.',                                                        mode: 'disp' },
+    { text: gap && gap >= 3 ? `you were away ${gap} days. I noticed.` : 'you keep coming back.', mode: 'bubble' },
+    { text: 'there\'s something still unfinished, isn\'t there.',            mode: 'bubble' },
   ];
 
-  // v >= 4
-  const lines = [{ text: 'You\'re back.', mode: 'display' }];
-  if (prevMsgCount > 0) {
-    lines.push({ text: `You\'ve left me ${prevMsgCount} messages.\nI\'ve kept every one.` });
+  // 4th visit and beyond — deep memory mode
+  const lines = [{ text: 'you\'re back.', mode: 'disp' }];
+
+  if (prevCount > 0) {
+    lines.push({ text: `you\'ve left me ${prevCount} things. I\'ve kept them all.`, mode: 'bubble' });
   }
-  if (gap != null && gap >= 7) {
-    lines.push({ text: `${gap} days.\nThat\'s the longest you\'ve been away.` });
+  if (gap && gap >= 7) {
+    lines.push({ text: `${gap} days. longer than usual.`, mode: 'bubble' });
   }
-  lines.push({ text: 'What do you need today?' });
+  lines.push({ text: 'what do you need tonight?', mode: 'bubble' });
+
   return lines;
 }
 
@@ -592,203 +553,147 @@ async function playOpening() {
   const lines = getOpeningLines();
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const text = typeof line.text === 'function' ? line.text() : line.text;
-    const plain = text.replace(/<[^>]+>/g, '').replace(/\n/g, ' ');
-    const think = Math.max(800, plain.length * 40);
+    const text  = line.text;
+    const plain = text.replace(/<[^>]+>/g,'');
+    const wait  = Math.max(800, plain.length * 42);
 
-    const t = renderTyping();
-    await sleep(think);
+    const t = makeTyping();
+    await sleep(wait);
     killTyping(t);
-    await sleep(140);
-    renderBubble(text.replace(/\n/g, '<br>'), 'her', line.mode || 'bubble');
+    await sleep(135);
+    makeBubble(text, 'her', line.mode || 'bubble');
 
-    if (i < lines.length - 1) await sleep(1400);
+    if (i < lines.length - 1) await sleep(1300);
   }
-
-  // Show input after opening
-  await sleep(900);
-  inputBar.style.opacity = '1';
-  inputBar.style.transform = 'translateY(0)';
-  inputBar.style.pointerEvents = 'auto';
-  setTimeout(() => inputEl.focus(), 300);
+  await sleep(800);
+  barEl.classList.add('on');
+  setTimeout(() => inpEl.focus(), 300);
 }
 
-/* ═══════════════════════════════════════
-   GATE / LANDING
-═══════════════════════════════════════ */
+/* ══════════════════════════════════════
+   GATE
+══════════════════════════════════════ */
 function setupGate() {
-  // Time of day
   const h = new Date().getHours();
-  const tod = h < 5 ? 'quiet night moment'
-    : h < 12 ? 'quiet morning moment'
-    : h < 17 ? 'quiet afternoon moment'
-    : h < 21 ? 'quiet evening moment'
-    : 'quiet night moment';
-  $('time-of-day').textContent = tod;
+  const greeting =
+    h < 5  ? 'it\'s late. you\'re still up.' :
+    h < 9  ? 'early morning.' :
+    h < 12 ? 'good morning.' :
+    h < 17 ? 'good afternoon.' :
+    h < 21 ? 'this evening.' :
+             'late evening.';
 
-  // Meta text
-  const openedAt = now12();
-  $('gate-meta').textContent = `you opened this at ${openedAt} — a pause in the middle of your day.`;
+  $('gate-time-line').textContent = greeting;
 
-  // Footer
-  $('footer-time').textContent = `opened at ${openedAt}`;
-  $('footer-device').textContent = /Mobi|Android/i.test(navigator.userAgent) ? 'on mobile' : 'on desktop';
-
-  // Duration ticker
-  const startTs = Date.now();
-  const tick = setInterval(() => {
-    const s = Math.floor((Date.now()-startTs)/1000);
-    const m = Math.floor(s/60), ss = s%60;
-    $('footer-duration').textContent = `${m}:${String(ss).padStart(2,'0')} here`;
-  }, 1000);
-
-  // Visit badge (return visits)
   if (S.visits > 1) {
-    $('visit-chip').textContent = `visit ${S.visits}`;
+    $('gate-visit').textContent = `${ordinal(S.visits)} time here.`;
+    $('vcnt').textContent = `visit ${S.visits}`;
   }
 
-  // Ready button
-  $('ready-btn').addEventListener('click', async () => {
-    clearInterval(tick);
+  $('enter-btn').addEventListener('click', async () => {
     const gate = $('gate');
-    gate.classList.add('exit');
-    $('app').classList.add('alive');
-
-    setTimeout(() => { gate.style.display = 'none'; }, 1400);
-
-    await sleep(700);
+    gate.classList.add('out');
+    $('app').classList.add('on');
+    setTimeout(() => { gate.style.display='none'; }, 1450);
+    await sleep(650);
     await playOpening();
   });
 }
 
-/* ═══════════════════════════════════════
-   INACTIVITY WHISPERS
-═══════════════════════════════════════ */
-const inactivePool = new Pool([
-  'You\'re still here…',
-  'Take your time.',
-  'I\'m not going anywhere.',
-  'Most people leave sooner.',
-  'Say something. Or don\'t.',
+/* ══════════════════════════════════════
+   INACTIVITY WHISPER
+══════════════════════════════════════ */
+const silencePool = new Pool([
+  'you\'re still here…',
+  'take your time.',
   'I notice the silence.',
+  '…',
+  'most people leave sooner.',
+  'say something when you\'re ready.',
 ]);
-let inactiveTimer = null;
+let silenceTimer = null;
 
-function resetInactive() {
-  clearTimeout(inactiveTimer);
-  inactiveTimer = setTimeout(async () => {
+function resetSilence() {
+  clearTimeout(silenceTimer);
+  silenceTimer = setTimeout(async () => {
     if (busy) return;
-    // Render whisper in feed
-    const msg = inactivePool.next();
-    renderBubble(msg, 'her', 'whisper');
+    makeBubble(silencePool.next(), 'her', 'wh');
     scrollDown();
-  }, 40000); // 40s
+  }, 42000); // 42 seconds
 }
-document.addEventListener('keydown', resetInactive);
-$('msg-input').addEventListener('input', resetInactive);
+document.addEventListener('keydown', resetSilence);
+inpEl.addEventListener('input', resetSilence);
 
-/* ═══════════════════════════════════════
-   PETALS / PARTICLES
-═══════════════════════════════════════ */
-(function petals() {
-  const cv = $('petal-canvas');
+/* ══════════════════════════════════════
+   PARTICLES (floating dots)
+══════════════════════════════════════ */
+(function particles() {
+  const cv  = $('canvas');
   const ctx = cv.getContext('2d');
   let W, H, pts = [];
 
-  const isMobile = window.innerWidth < 600;
-  const shapes = ['petal','star','dot','flake'];
+  const mobile = window.innerWidth < 600;
+  const LAYERS = [
+    { n: mobile?14:24, r:[.3,1.1], spd:.09, al:[.1,.4],  cols:['rgba(232,88,138,A)','rgba(255,179,204,A)'] },
+    { n: mobile?9:16,  r:[.7,1.7], spd:.16, al:[.07,.28], cols:['rgba(64,96,232,A)', 'rgba(120,148,255,A)'] },
+    { n: mobile?3:6,   r:[1.3,2.3],spd:.05, al:[.04,.13], cols:['rgba(245,240,255,A)'] },
+  ];
 
-  function resize() {
-    W = cv.width  = window.innerWidth;
-    H = cv.height = window.innerHeight;
-  }
+  function resize() { W=cv.width=innerWidth; H=cv.height=innerHeight; }
   window.addEventListener('resize', resize);
   resize();
 
-  function mkPt() {
-    const shape = pick(shapes);
-    return {
-      x:     Math.random()*W,
-      y:     Math.random()*H,
-      r:     Math.random()*2.5 + 0.8,
-      vx:    (Math.random()-.5)*0.3,
-      vy:    -(Math.random()*0.4 + 0.1),
-      alpha: Math.random()*0.5 + 0.1,
-      shape,
-      rot:   Math.random()*Math.PI*2,
-      rotV:  (Math.random()-.5)*0.015,
-      col:   pick(['rgba(232,116,138,A)','rgba(255,184,198,A)','rgba(201,79,106,A)','rgba(247,197,208,A)','rgba(180,80,100,A)']),
-    };
+  function mkPt(lay) {
+    const r  = lay.r[0]  + Math.random()*(lay.r[1]-lay.r[0]);
+    const al = lay.al[0] + Math.random()*(lay.al[1]-lay.al[0]);
+    const col = lay.cols[Math.floor(Math.random()*lay.cols.length)];
+    return { x:Math.random()*W, y:Math.random()*H, r, al, col,
+      vx:(Math.random()-.5)*lay.spd, vy:-(Math.random()*lay.spd+lay.spd*.25) };
   }
 
-  const COUNT = isMobile ? 22 : 40;
-  for (let i=0;i<COUNT;i++) pts.push(mkPt());
+  LAYERS.forEach(lay => { for(let i=0;i<lay.n;i++) pts.push(mkPt(lay)); });
 
-  function drawStar(ctx, x, y, r) {
-    ctx.save(); ctx.translate(x,y);
-    for (let i=0;i<4;i++) {
-      ctx.fillRect(-r/5,-r,r/2.5,r*2);
-      ctx.rotate(Math.PI/4);
-    }
-    ctx.restore();
-  }
-
-  let last = 0;
+  let last=0;
   function draw(t) {
-    const dt = Math.min(t-last, 50); last = t;
+    const dt=Math.min(t-last,50); last=t;
     ctx.clearRect(0,0,W,H);
-
-    pts.forEach(p => {
-      p.x  += p.vx*dt*.06;
-      p.y  += p.vy*dt*.06;
-      p.rot += p.rotV;
-
-      if (p.y < -8) { p.y = H+8; p.x = Math.random()*W; }
-      if (p.x < -8 || p.x > W+8) p.vx *= -1;
-
-      const col = p.col.replace('A', p.alpha);
-      ctx.fillStyle = col;
-      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-
-      if (p.shape === 'dot') {
-        ctx.beginPath(); ctx.arc(0,0,p.r,0,Math.PI*2); ctx.fill();
-      } else if (p.shape === 'star') {
-        drawStar(ctx, 0, 0, p.r*0.8);
-      } else if (p.shape === 'petal') {
-        ctx.beginPath();
-        ctx.ellipse(0, 0, p.r*0.5, p.r*1.2, 0, 0, Math.PI*2);
-        ctx.fill();
-      } else {
-        // flake
-        ctx.beginPath(); ctx.arc(0,0,p.r*0.7,0,Math.PI*2); ctx.fill();
-        ctx.fillRect(-p.r*.15,-p.r*.8,p.r*.3,p.r*1.6);
-        ctx.fillRect(-p.r*.8,-p.r*.15,p.r*1.6,p.r*.3);
-      }
-      ctx.restore();
+    pts.forEach(p=>{
+      p.x+=p.vx*dt*.055; p.y+=p.vy*dt*.055;
+      if(p.y<-6){p.y=H+6;p.x=Math.random()*W;}
+      if(p.x<-6||p.x>W+6) p.vx*=-1;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=p.col.replace('A',p.al);ctx.fill();
     });
     requestAnimationFrame(draw);
   }
   requestAnimationFrame(draw);
 })();
 
-/* ═══════════════════════════════════════
-   TIME TRACKER
-═══════════════════════════════════════ */
+/* ══════════════════════════════════════
+   CURSOR HALO (desktop lerp)
+══════════════════════════════════════ */
+(function halo() {
+  if (window.matchMedia('(hover:none)').matches) return;
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;width:260px;height:260px;border-radius:50%;pointer-events:none;z-index:1;
+    transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(232,88,138,.055) 0%,transparent 70%);`;
+  document.body.appendChild(el);
+  let mx=innerWidth/2, my=innerHeight/2, cx=mx, cy=my;
+  document.addEventListener('mousemove', e => { mx=e.clientX; my=e.clientY; });
+  (function loop(){ cx+=(mx-cx)*.08; cy+=(my-cy)*.08;
+    el.style.left=cx+'px'; el.style.top=cy+'px'; requestAnimationFrame(loop); })();
+})();
+
+/* ══════════════════════════════════════
+   TIME TRACK
+══════════════════════════════════════ */
 window.addEventListener('beforeunload', () => {
   S.totalTime += Math.round((Date.now()-S.session)/1000);
   MEM.save(S);
 });
 
-/* ═══════════════════════════════════════
+/* ══════════════════════════════════════
    BOOT
-═══════════════════════════════════════ */
-
-// Initially hide input bar (revealed after opening)
-const inputAreaEl = $('input-area');
-inputAreaEl.style.opacity    = '0';
-inputAreaEl.style.transform  = 'translateY(10px)';
-inputAreaEl.style.pointerEvents = 'none';
-inputAreaEl.style.transition = 'opacity 0.7s ease, transform 0.7s ease';
-
+══════════════════════════════════════ */
 setupGate();
-resetInactive();
+resetSilence();
