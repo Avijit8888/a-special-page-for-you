@@ -2,63 +2,109 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>She Remembers</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#050b1a" />
+  <title>She Knows</title>
   <link rel="stylesheet" href="style.css" />
-  <!-- Google Fonts: Cormorant Garamond (display) + DM Sans (body) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@300;400&display=swap" rel="stylesheet" />
+  <!--
+    Cormorant Garamond: high-fashion editorial serif — used for "her" display lines
+    Lato: clean, warm, slightly humanist sans — used for body/ui text
+  -->
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Lato:wght@300;400&display=swap" rel="stylesheet" />
 </head>
 <body>
 
-  <!-- Ambient background canvas (particles) -->
-  <canvas id="ambient-canvas"></canvas>
+  <!-- ░░ ATMOSPHERE LAYERS ░░ -->
+  <canvas id="canvas" aria-hidden="true"></canvas>
+  <div class="aurora" aria-hidden="true"></div>
 
-  <!-- Radial glow layers -->
-  <div class="glow glow-pink"></div>
-  <div class="glow glow-blue"></div>
+  <!-- ░░ VIGNETTE ░░ -->
+  <div class="vignette" aria-hidden="true"></div>
 
-  <!-- Main wrapper -->
-  <main id="app">
+  <!-- ░░ CURSOR ░░ -->
+  <div id="cursor-halo" aria-hidden="true"></div>
 
-    <!-- Intro logo / sigil -->
-    <div class="sigil" id="sigil">
-      <div class="sigil-ring"></div>
-      <div class="sigil-core"></div>
+  <!-- ═══════════════════════════════════
+       INTRO GATE — animates away on load
+  ═══════════════════════════════════ -->
+  <div id="gate" role="presentation">
+    <div id="gate-inner">
+      <!-- Living sigil -->
+      <div id="sigil" aria-hidden="true">
+        <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="40" cy="40" r="38" stroke="url(#sg1)" stroke-width="0.6" />
+          <circle cx="40" cy="40" r="28" stroke="url(#sg2)" stroke-width="0.4" opacity="0.6"/>
+          <circle cx="40" cy="40" r="5" fill="url(#sg3)" />
+          <defs>
+            <linearGradient id="sg1" x1="0" y1="0" x2="80" y2="80">
+              <stop offset="0%" stop-color="#ff4fa3"/>
+              <stop offset="100%" stop-color="#3d5ce8"/>
+            </linearGradient>
+            <linearGradient id="sg2" x1="80" y1="0" x2="0" y2="80">
+              <stop offset="0%" stop-color="#3d5ce8" stop-opacity="0.8"/>
+              <stop offset="100%" stop-color="#ff4fa3" stop-opacity="0.8"/>
+            </linearGradient>
+            <radialGradient id="sg3" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#ffb3d9"/>
+              <stop offset="100%" stop-color="#ff4fa3"/>
+            </radialGradient>
+          </defs>
+        </svg>
+      </div>
+
+      <!-- Gate headline — set by JS -->
+      <p id="gate-line" aria-live="polite"></p>
+
+      <!-- Persona name -->
+      <span id="gate-name">she knows.</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════
+       MAIN EXPERIENCE
+  ═══════════════════════════════════ -->
+  <main id="app" aria-label="Conversation">
+
+    <!-- Status bar -->
+    <header id="status-bar" aria-hidden="true">
+      <div id="presence-dot"></div>
+      <span id="presence-label">present</span>
+      <div id="visit-badge"></div>
+    </header>
+
+    <!-- Scrollable feed -->
+    <div id="feed-scroll">
+      <div id="feed" aria-live="polite" aria-label="Messages"></div>
     </div>
 
-    <!-- Message stream -->
-    <section class="message-stream" id="message-stream" aria-live="polite">
-      <!-- Messages injected by JS -->
-    </section>
+    <!-- Inactivity whisper (hidden by default) -->
+    <div id="inactivity-whisper" aria-live="polite" aria-hidden="true"></div>
 
-    <!-- Input zone -->
-    <div class="input-zone" id="input-zone">
-      <div class="input-wrapper">
+    <!-- Input bar -->
+    <footer id="input-bar">
+      <div id="input-shell" role="group" aria-label="Message input">
         <textarea
-          id="user-input"
-          class="user-input"
+          id="msg-input"
           placeholder="Say something…"
           rows="1"
-          maxlength="500"
+          maxlength="600"
           aria-label="Your message"
+          autocomplete="off"
+          spellcheck="false"
         ></textarea>
-        <button id="send-btn" class="send-btn" aria-label="Send message">
-          <span class="send-label">send</span>
-          <svg class="send-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M5 12H19M19 12L13 6M19 12L13 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <button id="send-btn" aria-label="Send message">
+          <!-- Send arrow -->
+          <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 9H15M15 9L10 4M15 9L10 14"
+              stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
       </div>
-      <p class="input-hint" id="input-hint">you don't have to explain yourself…</p>
-    </div>
-
-    <!-- Visit counter / memory indicator (subtle) -->
-    <div class="memory-indicator" id="memory-indicator" aria-hidden="true">
-      <span class="memory-dot"></span>
-      <span class="memory-label" id="memory-label">first time here</span>
-    </div>
+      <p id="input-subtext">you don't have to explain yourself…</p>
+    </footer>
 
   </main>
 
