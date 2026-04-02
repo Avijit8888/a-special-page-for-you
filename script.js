@@ -15,6 +15,15 @@
  */
 
 'use strict';
+// 🔥 Firebase init (added)
+const firebaseConfig = {
+  apiKey: "AIzaSyB...",  
+  authDomain: "chat-tracker-ac07c.firebaseapp.com",
+  projectId: "chat-tracker-ac07c"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
 /* ══════════════════════════════════════
    UTILS
@@ -413,7 +422,15 @@ async function handleSend() {
 
   // Show user message
   makeBubble(esc(raw), 'me', 'bubble', true);
-
+// 🔥 Firebase store (added)
+try {
+  db.collection("messages").add({
+    text: raw,
+    time: new Date().toISOString()
+  });
+} catch (e) {
+  console.log("Firebase error:", e);
+}
   // Detect repeat
   const key = raw.toLowerCase().trim();
   repeatMap[key] = (repeatMap[key] || 0) + 1;
