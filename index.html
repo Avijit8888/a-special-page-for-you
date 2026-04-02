@@ -1,124 +1,70 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#fff0f5" />
-  <title>just for you</title>
-  <link rel="stylesheet" href="style.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>presence</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&family=Outfit:wght@200;300;400&display=swap" rel="stylesheet"/>
 </head>
 <body>
 
-  <!-- Floating petals canvas -->
-  <canvas id="petal-canvas" aria-hidden="true"></canvas>
+  <canvas id="canvas"></canvas>
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+  <div class="orb orb-c"></div>
+  <div class="vignette"></div>
 
-  <!-- Soft glow blobs -->
-  <div class="blob blob-a" aria-hidden="true"></div>
-  <div class="blob blob-b" aria-hidden="true"></div>
-  <div class="blob blob-c" aria-hidden="true"></div>
-
-  <!-- ═══════════════════════════════
-       LANDING PAGE (Gate)
-  ═══════════════════════════════ -->
+  <!-- GATE -->
   <div id="gate">
-    <div id="gate-content">
-
-      <!-- Top pill badge -->
-      <div class="pill-badge" id="time-badge">
-        ✦ <span id="time-of-day">quiet moment</span> ✦
+    <div id="gate-box">
+      <div class="sigil" id="sigil">
+        <div class="sigil-ring r1"></div>
+        <div class="sigil-ring r2"></div>
+        <div class="sigil-dot"></div>
       </div>
-
-      <!-- Main headline -->
-      <h1 id="gate-headline">
-        Hey… I made something<br/>
-        <em class="pink-italic">just for you</em>
-        <span class="heart-emoji">🌸</span>
-      </h1>
-
-      <!-- Sparkle decorations -->
-      <div class="sparkles" aria-hidden="true">
-        <span class="sp sp1">✦</span>
-        <span class="sp sp2">✧</span>
-        <span class="sp sp3">❋</span>
-        <span class="sp sp4">✦</span>
-        <span class="sp sp5">✧</span>
-      </div>
-
-      <!-- Sub-copy -->
-      <p class="gate-sub italic-serif">Some things are meant to find you.</p>
-      <p class="gate-sub italic-serif">No one else can see this — it's only for <em>you</em>.</p>
-
-      <!-- Time awareness -->
-      <p class="gate-meta" id="gate-meta">loading…</p>
-
-      <!-- Divider line -->
-      <div class="soft-divider"></div>
-
-      <p class="gate-whisper italic-serif">Not everyone finds their way here.</p>
-
-      <!-- CTA button -->
-      <button id="ready-btn" class="ready-btn">
-        <span>I'm ready</span>
-        <span class="btn-arrow">→</span>
+      <p class="gate-tag">this space is only for you</p>
+      <h1 id="gate-title">she understands<br/><em>what you don't say</em></h1>
+      <p class="gate-sub" id="gate-time-line"></p>
+      <button id="enter-btn">
+        <span>enter</span>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M9 4l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-
-      <!-- Footer meta bar -->
-      <div class="gate-footer">
-        <span id="footer-time"></span>
-        <span id="footer-duration">0:00 here</span>
-        <span id="footer-device"></span>
-      </div>
-
+      <p class="gate-visit" id="gate-visit"></p>
     </div>
   </div>
 
-  <!-- ═══════════════════════════════
-       MAIN CHAT EXPERIENCE
-  ═══════════════════════════════ -->
+  <!-- MAIN -->
   <main id="app">
 
-    <!-- Top bar -->
-    <div id="top-bar">
-      <div id="her-avatar" aria-hidden="true">
-        <div class="avatar-ring"></div>
-        <div class="avatar-core">🌸</div>
+    <div id="topbar">
+      <div id="avatar">
+        <div class="av-pulse"></div>
+        <div class="av-core">🌸</div>
       </div>
-      <div id="her-info">
+      <div id="name-block">
         <span id="her-name">she</span>
-        <span id="her-status">present with you</span>
+        <span id="her-status">here with you</span>
       </div>
-      <div id="visit-chip" aria-hidden="true"></div>
+      <span id="vcnt"></span>
     </div>
 
-    <!-- Message feed -->
     <div id="feed-wrap">
-      <div id="feed" aria-live="polite"></div>
+      <div id="feed" role="log" aria-live="polite" aria-label="conversation"></div>
     </div>
 
-    <!-- Input area -->
-    <div id="input-area">
-      <div id="input-box">
-        <textarea
-          id="msg-input"
-          placeholder="Say something…"
-          rows="1"
-          maxlength="500"
-          aria-label="Your message"
-          autocomplete="off"
-          spellcheck="false"
-        ></textarea>
-        <button id="send-btn" aria-label="Send">
-          <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4 10H16M16 10L11 5M16 10L11 15"
-              stroke="currentColor" stroke-width="1.8"
-              stroke-linecap="round" stroke-linejoin="round"/>
+    <div id="bar">
+      <div id="composer">
+        <textarea id="inp" placeholder="say something…" rows="1" maxlength="600" autocomplete="off" spellcheck="false"></textarea>
+        <button id="sbtn" aria-label="send">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M3 8h10M10 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
       </div>
-      <p id="input-hint">you don't have to explain yourself…</p>
+      <p id="hint">you don't have to explain yourself…</p>
     </div>
 
   </main>
